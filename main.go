@@ -11,5 +11,5 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	bf.Insert("Diego Gasco")
+	bf.Insert(2500)
 }

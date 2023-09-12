@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+const SIZEOFUINT8 = 8
+
 // murmurHash2 calculates the MurmurHash2 hash of the given byte slice with the provided seed.
 func murmurHash2(key []byte, seed uint32) uint32 {
 	const (
@@ -66,7 +68,7 @@ func New(length uint16, hash_functions uint8) (*BloomFilter, error) {
 	}
 
 	actual_length := int(length/8) + 1
-	bf := BloomFilter{array_size: uint32(actual_length), array: make([]byte, actual_length), hash_functions: hash_functions}
+	bf := BloomFilter{array_size: uint32(length), array: make([]byte, actual_length), hash_functions: hash_functions}
 
 	return &bf, nil
 }
@@ -98,12 +100,16 @@ func (bf *BloomFilter) Insert(item interface{}) error {
 		fmt.Println("Inserting string:", strItem)
 		byteString := []byte(strItem)
 		for i := 0; i < int(bf.hash_functions); i++ {
-			res := murmurHash2(byteString, uint32(i)) % 32
-			fmt.Println(res)
+			res := murmurHash2(byteString, uint32(i)) % bf.array_size // Compute the murmur hashing
+			array_pos := int(res / SIZEOFUINT8)                       // Array's cell
+			cell_pos := int(res) - array_pos*SIZEOFUINT8 - 1          // Bit inside the specific cell
+			bf.array[array_pos] |= 1 << uint(cell_pos)                // Set the bit to 1
 		}
 	} else if intItem, ok := item.(int); ok {
 		fmt.Println("Inserting int:", intItem)
-
+		byteInt := make([]byte, 4)
+		binary.LittleEndian.PutUint32(byteInt, uint32(intItem))
+		fmt.Println(byteInt)
 	} else {
 		return errors.New("unsupported item type")
 	}
