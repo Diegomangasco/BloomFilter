@@ -52,23 +52,23 @@ func murmurHash2(key []byte, seed uint32) uint32 {
 
 // BloomFilter represents a probabilistic data structure used for membership testing.
 type BloomFilter struct {
-	array_size     uint32 // The array's size
-	array          []byte // The array of bits used in the Bloom filter.
-	hash_functions uint8  // The number of hash functions used for hashing items.
+	arraySize     uint32 // The array's size
+	array         []byte // The array of bits used in the Bloom filter.
+	hashFunctions uint8  // The number of hash functions used for hashing items.
 }
 
 // New creates and initializes a new BloomFilter with the specified length and number of hash functions.
-func New(length uint16, hash_functions uint8) (*BloomFilter, error) {
+func New(length uint16, hashFunctions uint8) (*BloomFilter, error) {
 	if length <= 0 {
 		return nil, errors.New("negative number for length")
 	}
 
-	if hash_functions <= 0 {
+	if hashFunctions <= 0 {
 		return nil, errors.New("negative number for hash function")
 	}
 
 	actual_length := int(length/8) + 1
-	bf := BloomFilter{array_size: uint32(length), array: make([]byte, actual_length), hash_functions: hash_functions}
+	bf := BloomFilter{arraySize: uint32(length), array: make([]byte, actual_length), hashFunctions: hashFunctions}
 
 	return &bf, nil
 }
@@ -85,7 +85,7 @@ func (bf *BloomFilter) GetArray() ([]byte, error) {
 // GetHashFunctions retrieves the number of hash functions associated with the BloomFilter structure
 func (bf *BloomFilter) GetHashFunctions() (uint8, error) {
 	if bf.array != nil {
-		return bf.hash_functions, nil
+		return bf.hashFunctions, nil
 	}
 
 	return 0, errors.New("structure inizialized badly")
@@ -96,30 +96,64 @@ func (bf *BloomFilter) GetHashFunctions() (uint8, error) {
 func (bf *BloomFilter) Insert(item interface{}) error {
 	// Implement insertion logic here based on the item's type and hash it.
 	// Update the bits in the Bloom filter array accordingly.
+
+	var byteArray []byte
 	if strItem, ok := item.(string); ok {
 		fmt.Println("Inserting string:", strItem)
-		byteString := []byte(strItem)
-		for i := 0; i < int(bf.hash_functions); i++ {
-			res := murmurHash2(byteString, uint32(i)) % bf.array_size // Compute the murmur hashing
-			array_pos := int(res / SIZEOFUINT8)                       // Array's cell
-			cell_pos := int(res) - array_pos*SIZEOFUINT8 - 1          // Bit inside the specific cell
-			bf.array[array_pos] |= 1 << uint(cell_pos)                // Set the bit to 1
-		}
+		byteArray = []byte(strItem)
 	} else if intItem, ok := item.(int); ok {
 		fmt.Println("Inserting int:", intItem)
-		byteInt := make([]byte, 4)
-		binary.LittleEndian.PutUint32(byteInt, uint32(intItem))
-		fmt.Println(byteInt)
+		byteArray = make([]byte, 4)
+		binary.LittleEndian.PutUint32(byteArray, uint32(intItem))
 	} else {
 		return errors.New("unsupported item type")
 	}
+
+	for i := 0; i < int(bf.hashFunctions); i++ {
+		res := murmurHash2(byteArray, uint32(i)) % bf.arraySize // Compute the murmur hashing
+		arrayPos := int(res / SIZEOFUINT8)                      // Array's cell
+		cellPos := int(res) - arrayPos*SIZEOFUINT8 - 1          // Bit inside the specific cell
+		if cellPos == -1 {
+			cellPos = 7
+		}
+		bf.array[arrayPos] |= 1 << uint(cellPos) // Set the bit to 1
+	}
+
 	return nil
 }
 
 // Contains checks if an item is possibly in the BloomFilter.
 // The item parameter can be of any type as it is a generic interface{}.
-func Contains(bf *BloomFilter, item interface{}) bool {
+// Return true if it might be in the filter, false if it definitely isn't.
+func (bf *BloomFilter) Contains(item interface{}) (bool, error) {
 	// Implement the logic to check if the item is possibly in the Bloom filter.
-	// Return true if it might be in the filter, false if it definitely isn't.
-	return false
+
+	var byteArray []byte
+	if strItem, ok := item.(string); ok {
+		fmt.Println("Checking string:", strItem)
+		byteArray = []byte(strItem)
+	} else if intItem, ok := item.(int); ok {
+		fmt.Println("Checking int:", intItem)
+		byteArray = make([]byte, 4)
+		binary.LittleEndian.PutUint32(byteArray, uint32(intItem))
+	} else {
+		return false, errors.New("unsupported item type")
+	}
+
+	for i := 0; i < int(bf.hashFunctions); i++ {
+		res := murmurHash2(byteArray, uint32(i)) % bf.arraySize // Compute the murmur hashing
+		arrayPos := int(res / SIZEOFUINT8)                      // Array's cell
+		cellPos := int(res) - arrayPos*SIZEOFUINT8 - 1          // Bit inside the specific cell
+		if cellPos == -1 {
+			cellPos = 7
+		}
+		bitMask := byte(1 << uint(cellPos))
+		value := bf.array[arrayPos] // Get the value of the specific cell in the BloomFilter's array
+		value &= bitMask
+		if value == 0 {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
