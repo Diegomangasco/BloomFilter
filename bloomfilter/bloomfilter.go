@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 )
 
 const SIZEOFUINT8 = 8
@@ -58,7 +59,7 @@ type BloomFilter struct {
 }
 
 // New creates and initializes a new BloomFilter with the specified length and number of hash functions.
-func New(length uint16, hashFunctions uint8) (*BloomFilter, error) {
+func NewBloomFilter(length uint16, hashFunctions uint8) (*BloomFilter, error) {
 	if length <= 0 {
 		return nil, errors.New("negative number for length")
 	}
@@ -156,4 +157,42 @@ func (bf *BloomFilter) Contains(item interface{}) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// FalsePositiveRate returns the false positive rate based on the number of hash functions and the filter size of the BloomFilter.
+func (bf *BloomFilter) FalsePositiveRate() (float32, error) {
+	return 2.2, nil
+}
+
+// Union creates a new Bloom Filter representing the union of two Bloom Filters.
+func (bf1 *BloomFilter) Union(bf2 *BloomFilter) (BloomFilter, error) {
+	return BloomFilter{}, nil
+}
+
+// Intersection creates a new Bloom Filter representing the intersection of two Bloom Filters.
+func (bf1 *BloomFilter) Intersection(bf2 *BloomFilter) (BloomFilter, error) {
+	return BloomFilter{}, nil
+}
+
+// NumberOfItems estimates the number of items present inside the bloom filter
+func (bf *BloomFilter) NumberOfItems() (int, error) {
+	if bf.array != nil {
+		m := int(bf.arraySize)
+		k := int(bf.hashFunctions)
+		x := 0
+		for i := 0; i < int(bf.arraySize/8)+1; i++ {
+			item := bf.array[i]
+			count := 0
+			for item > 0 {
+				count += int(item & 1)
+				item >>= 1
+			}
+			x += count
+		}
+		a := -float64(m) / float64(k)
+		b := math.Log(float64(1) - float64(x)/float64(m))
+		return int(a * b), nil
+	}
+
+	return 0, errors.New("structure inizialized badly")
 }
