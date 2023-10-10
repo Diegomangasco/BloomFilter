@@ -30,7 +30,28 @@ type BloomFilter struct {
     hashFunctions uint8
 }
 
-BloomFilter represents a Bloom Filter data structure used for probabilistic membership testing. It contains the following fields:
+/*BloomFilter represents a Bloom Filter data structure used for probabilistic membership testing. It contains the following fields:
     - arraySize (Type: uint32): The size of the array in bits.
     - array (Type: []byte): The array of bits used in the Bloom filter.
-    - hashFunctions (Type: uint8): The number of hash functions used for hashing items
+    - hashFunctions (Type: uint8): The number of hash functions used for hashing items*/
+ ```
+
+## Functions
+
+### `NewBloomFilter(capacity int, falsePositiveRate float64) *BloomFilter`
+
+### `GetArray() []byte`
+
+### `GetHashFunctions() uint8`
+
+### `Insert(item interface{}) error`
+
+### `Contains(item interface{}) (bool, error)`
+
+### `FalsePositiveRate() (float32, error)`
+
+### `Union(bf2 *BloomFilter) (*BloomFilter, error)`
+
+### `Intersection(bf2 *BloomFilter) (*BloomFilter, error)`
+
+### `NumberOfItems() (int, error)`

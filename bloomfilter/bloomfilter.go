@@ -160,18 +160,92 @@ func (bf *BloomFilter) Contains(item interface{}) (bool, error) {
 }
 
 // FalsePositiveRate returns the false positive rate based on the number of hash functions and the filter size of the BloomFilter.
-func (bf *BloomFilter) FalsePositiveRate() (float32, error) {
-	return 2.2, nil
+func (bf *BloomFilter) FalsePositiveRate() (float64, error) {
+	if bf.array == nil {
+		return -1.0, errors.New("structure inizialized badly")
+	}
+
+	elements, err := bf.NumberOfItems()
+	if err != nil {
+		return -1.0, err
+	}
+	fpr := math.Pow(1-math.Exp(float64(elements)*float64(bf.hashFunctions)/(float64(bf.arraySize))), float64(bf.hashFunctions))
+
+	return fpr, nil
 }
 
 // Union creates a new Bloom Filter representing the union of two Bloom Filters.
-func (bf1 *BloomFilter) Union(bf2 *BloomFilter) (BloomFilter, error) {
-	return BloomFilter{}, nil
+func (bf1 *BloomFilter) Union(bf2 *BloomFilter) ([]byte, error) {
+
+	if bf1.array == nil || bf2.array == nil {
+		return make([]byte, 0), errors.New("structure inizialized badly")
+	}
+
+	var arr []byte
+	var major []byte
+	var minor []byte
+	var major_size int
+	var minor_size int
+	size1 := int(bf1.arraySize/8) + 1
+	size2 := int(bf2.arraySize/8) + 1
+	if size1 > size2 {
+		major = bf1.array
+		minor = bf2.array
+		major_size = size1
+		minor_size = size2
+	} else {
+		major = bf2.array
+		minor = bf1.array
+		major_size = size2
+		minor_size = size1
+	}
+
+	for i := 0; i < major_size; i++ {
+		if i < minor_size {
+			arr[i] = major[i] | minor[i]
+		} else {
+			arr[i] = major[i]
+		}
+	}
+
+	return arr, nil
 }
 
 // Intersection creates a new Bloom Filter representing the intersection of two Bloom Filters.
-func (bf1 *BloomFilter) Intersection(bf2 *BloomFilter) (BloomFilter, error) {
-	return BloomFilter{}, nil
+func (bf1 *BloomFilter) Intersection(bf2 *BloomFilter) ([]byte, error) {
+
+	if bf1.array == nil || bf2.array == nil {
+		return make([]byte, 0), errors.New("structure inizialized badly")
+	}
+
+	var arr []byte
+	var major []byte
+	var minor []byte
+	var major_size int
+	var minor_size int
+	size1 := int(bf1.arraySize/8) + 1
+	size2 := int(bf2.arraySize/8) + 1
+	if size1 > size2 {
+		major = bf1.array
+		minor = bf2.array
+		major_size = size1
+		minor_size = size2
+	} else {
+		major = bf2.array
+		minor = bf1.array
+		major_size = size2
+		minor_size = size1
+	}
+
+	for i := 0; i < major_size; i++ {
+		if i < minor_size {
+			arr[i] = major[i] & minor[i]
+		} else {
+			arr[i] = 0
+		}
+	}
+
+	return arr, nil
 }
 
 // NumberOfItems estimates the number of items present inside the bloom filter
