@@ -5,50 +5,63 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"unsafe"
 )
 
 const SIZEOFUINT8 = 8
 
-// murmurHash2 calculates the MurmurHash2 hash of the given byte slice with the provided seed.
-func murmurHash2(key []byte, seed uint32) uint32 {
+func murmurHash3(key []byte, seed uint32) uint32 {
 	const (
-		m = 0x5bd1e995
-		r = 24
+		c1 = 0xcc9e2d51
+		c2 = 0x1b873593
+		r1 = 15
+		r2 = 13
+		m  = 5
+		n  = 0xe6546b64
 	)
 
+	hash := seed
+	data := key
 	length := len(key)
-	h := seed ^ uint32(length)
+	nblocks := length / 4
 
-	for length >= 4 {
-		k := binary.LittleEndian.Uint32(key)
-		k *= m
-		k ^= k >> r
-		k *= m
+	for i := 0; i < nblocks; i++ {
+		k := *(*uint32)(unsafe.Pointer(&data[i*4]))
+		k *= c1
+		k = (k << r1) | (k >> (32 - r1))
+		k *= c2
 
-		h *= m
-		h ^= k
-
-		key = key[4:]
-		length -= 4
+		hash ^= k
+		hash = (hash << r2) | (hash >> (32 - r2))
+		hash = hash*m + n
 	}
 
-	switch length {
+	tail := data[nblocks*4:]
+	k1 := uint32(0)
+
+	switch len(tail) & 3 {
 	case 3:
-		h ^= uint32(key[2]) << 16
+		k1 ^= uint32(tail[2]) << 16
 		fallthrough
 	case 2:
-		h ^= uint32(key[1]) << 8
+		k1 ^= uint32(tail[1]) << 8
 		fallthrough
 	case 1:
-		h ^= uint32(key[0])
-		h *= m
+		k1 ^= uint32(tail[0])
+		k1 *= c1
+		k1 = (k1 << r1) | (k1 >> (32 - r1))
+		k1 *= c2
+		hash ^= k1
 	}
 
-	h ^= h >> 13
-	h *= m
-	h ^= h >> 15
+	hash ^= uint32(length)
+	hash ^= (hash >> 16)
+	hash *= 0x85ebca6b
+	hash ^= (hash >> 13)
+	hash *= 0xc2b2ae35
+	hash ^= (hash >> 16)
 
-	return h
+	return hash
 }
 
 // BloomFilter represents a probabilistic data structure used for membership testing.
@@ -111,9 +124,10 @@ func (bf *BloomFilter) Insert(item interface{}) error {
 	}
 
 	for i := 0; i < int(bf.hashFunctions); i++ {
-		res := murmurHash2(byteArray, uint32(i)) % bf.arraySize // Compute the murmur hashing
-		arrayPos := int(res / SIZEOFUINT8)                      // Array's cell
-		cellPos := int(res) - arrayPos*SIZEOFUINT8 - 1          // Bit inside the specific cell
+		res := murmurHash3(byteArray, uint32(i))
+		res %= bf.arraySize
+		arrayPos := int(res / SIZEOFUINT8)             // Array's cell
+		cellPos := int(res) - arrayPos*SIZEOFUINT8 - 1 // Bit inside the specific cell
 		if cellPos == -1 {
 			cellPos = 7
 		}
@@ -142,9 +156,10 @@ func (bf *BloomFilter) Contains(item interface{}) (bool, error) {
 	}
 
 	for i := 0; i < int(bf.hashFunctions); i++ {
-		res := murmurHash2(byteArray, uint32(i)) % bf.arraySize // Compute the murmur hashing
-		arrayPos := int(res / SIZEOFUINT8)                      // Array's cell
-		cellPos := int(res) - arrayPos*SIZEOFUINT8 - 1          // Bit inside the specific cell
+		res := murmurHash3(byteArray, uint32(i))
+		res %= bf.arraySize
+		arrayPos := int(res / SIZEOFUINT8)             // Array's cell
+		cellPos := int(res) - arrayPos*SIZEOFUINT8 - 1 // Bit inside the specific cell
 		if cellPos == -1 {
 			cellPos = 7
 		}
@@ -169,16 +184,21 @@ func (bf *BloomFilter) FalsePositiveRate() (float64, error) {
 	if err != nil {
 		return -1.0, err
 	}
-	fpr := math.Pow(1-math.Exp(float64(elements)*float64(bf.hashFunctions)/(float64(bf.arraySize))), float64(bf.hashFunctions))
+	exp := math.Exp(float64(elements) * float64(bf.hashFunctions) / (float64(bf.arraySize)))
+	diff := 1 - exp
+	if diff < 0 {
+		diff = 0
+	}
+	fpr := math.Pow(diff, float64(bf.hashFunctions))
 
 	return fpr, nil
 }
 
 // Union creates a new Bloom Filter representing the union of two Bloom Filters.
-func (bf1 *BloomFilter) Union(bf2 *BloomFilter) ([]byte, error) {
+func (bf1 *BloomFilter) Union(bf2 *BloomFilter) (*BloomFilter, error) {
 
 	if bf1.array == nil || bf2.array == nil {
-		return make([]byte, 0), errors.New("structure inizialized badly")
+		return &BloomFilter{}, errors.New("structure inizialized badly")
 	}
 
 	var arr []byte
@@ -202,20 +222,27 @@ func (bf1 *BloomFilter) Union(bf2 *BloomFilter) ([]byte, error) {
 
 	for i := 0; i < major_size; i++ {
 		if i < minor_size {
-			arr[i] = major[i] | minor[i]
+			arr = append(arr, major[i]|minor[i])
 		} else {
-			arr[i] = major[i]
+			arr = append(arr, major[i])
 		}
 	}
 
-	return arr, nil
+	bf_union, err := NewBloomFilter(uint16(major_size-1)*SIZEOFUINT8, bf1.hashFunctions)
+	if err != nil {
+		return &BloomFilter{}, errors.New("structure inizialized badly")
+	}
+
+	bf_union.array = arr
+
+	return bf_union, nil
 }
 
 // Intersection creates a new Bloom Filter representing the intersection of two Bloom Filters.
-func (bf1 *BloomFilter) Intersection(bf2 *BloomFilter) ([]byte, error) {
+func (bf1 *BloomFilter) Intersection(bf2 *BloomFilter) (*BloomFilter, error) {
 
 	if bf1.array == nil || bf2.array == nil {
-		return make([]byte, 0), errors.New("structure inizialized badly")
+		return &BloomFilter{}, errors.New("structure inizialized badly")
 	}
 
 	var arr []byte
@@ -239,13 +266,20 @@ func (bf1 *BloomFilter) Intersection(bf2 *BloomFilter) ([]byte, error) {
 
 	for i := 0; i < major_size; i++ {
 		if i < minor_size {
-			arr[i] = major[i] & minor[i]
+			arr = append(arr, major[i]&minor[i])
 		} else {
-			arr[i] = 0
+			arr = append(arr, 0)
 		}
 	}
 
-	return arr, nil
+	bf_intersection, err := NewBloomFilter(uint16(major_size-1)*SIZEOFUINT8, bf1.hashFunctions)
+	if err != nil {
+		return &BloomFilter{}, errors.New("structure inizialized badly")
+	}
+
+	bf_intersection.array = arr
+
+	return bf_intersection, nil
 }
 
 // NumberOfItems estimates the number of items present inside the bloom filter
@@ -265,7 +299,7 @@ func (bf *BloomFilter) NumberOfItems() (int, error) {
 		}
 		a := -float64(m) / float64(k)
 		b := math.Log(float64(1) - float64(x)/float64(m))
-		return int(a * b), nil
+		return int(math.Ceil(a * b)), nil
 	}
 
 	return 0, errors.New("structure inizialized badly")

@@ -80,7 +80,7 @@ func TestBloomFilter_Union(t *testing.T) {
 	}
 
 	for _, item := range items1 {
-		exists, err := ContainsInBloomFilter(union, item)
+		exists, err := union.Contains(item)
 		if err != nil {
 			t.Errorf("Contains failed: %v", err)
 		}
@@ -91,7 +91,7 @@ func TestBloomFilter_Union(t *testing.T) {
 	}
 
 	for _, item := range items2 {
-		exists, err := ContainsInBloomFilter(union, item)
+		exists, err := union.Contains(item)
 		if err != nil {
 			t.Errorf("Contains failed: %v", err)
 		}
@@ -130,7 +130,7 @@ func TestBloomFilter_Intersection(t *testing.T) {
 	}
 
 	for _, item := range items1 {
-		exists, err := ContainsInBloomFilter(intersection, item)
+		exists, err := intersection.Contains(item)
 		if err != nil {
 			t.Errorf("Contains failed: %v", err)
 		}
@@ -141,7 +141,7 @@ func TestBloomFilter_Intersection(t *testing.T) {
 	}
 
 	for _, item := range items2 {
-		exists, err := ContainsInBloomFilter(intersection, item)
+		exists, err := intersection.Contains(item)
 		if err != nil {
 			t.Errorf("Contains failed: %v", err)
 		}
@@ -173,4 +173,3 @@ func TestBloomFilter_NumberOfItems(t *testing.T) {
 		t.Errorf("Incorrect number of items. Expected: %d, Got: %d", len(items), count)
 	}
 }
-
